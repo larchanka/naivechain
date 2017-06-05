@@ -21,7 +21,10 @@ const CRYPTO_HASH =
     process.env.CRYPTO_HASH ||
     '816534932c2b7154836da6afc367695e6337db8a921823784c14378abed4f7d7';
 
+// Array of available sockets
 const sockets = [];
+
+// Messages definition
 const MessageType = {
     QUERY_LATEST: 0,
     QUERY_ALL: 1,
@@ -39,12 +42,15 @@ class Block {
     }
 }
 
+// Genesis block generator
 const getGenesisBlock = () => {
     return new Block(0, '0', 1465154705, CRYPTO_DATA, CRYPTO_HASH);
 };
 
+// Inmemory blockchain storage
 const blockchain = [getGenesisBlock()];
 
+// HTTP server
 const initHttpServer = () => {
     const app = Express();
     app.use(BodyParser.json());
@@ -73,12 +79,14 @@ const initHttpServer = () => {
     );
 };
 
+// Web-socket server
 const initP2PServer = () => {
     const server = new WebSocket.Server({ port: P2P_PORT });
     server.on('connection', ws => initConnection(ws));
     console.log('Listening websocket p2p port on:'.yellow, P2P_PORT);
 };
 
+// Web-socket connector
 const initConnection = ws => {
     sockets.push(ws);
     initMessageHandler(ws);
@@ -86,6 +94,7 @@ const initConnection = ws => {
     write(ws, queryChainLengthMsg());
 };
 
+// Web-socket message handler
 const initMessageHandler = ws => {
     ws.on('message', data => {
         const message = JSON.parse(data);
@@ -104,6 +113,7 @@ const initMessageHandler = ws => {
     });
 };
 
+// Web-socket error handler
 const initErrorHandler = ws => {
     const closeConnection = ws => {
         console.log('Connection failed to peer:'.red, ws.url);
@@ -113,6 +123,7 @@ const initErrorHandler = ws => {
     ws.on('error', () => closeConnection(ws));
 };
 
+// Block generator
 const generateNextBlock = blockData => {
     const previousBlock = getLatestBlock();
     const nextIndex = previousBlock.index + 1;
@@ -132,6 +143,7 @@ const generateNextBlock = blockData => {
     );
 };
 
+// Block hash generator
 const calculateHashForBlock = block => {
     return calculateHash(
         block.index,
@@ -141,18 +153,21 @@ const calculateHashForBlock = block => {
     );
 };
 
+// Hash calculation utility
 const calculateHash = (index, previousHash, timestamp, data) => {
     return CryptoJS.SHA256(
         `${index}${previousHash}${timestamp}${data}`
     ).toString();
 };
 
+// Block adding utility
 const addBlock = newBlock => {
     if (isValidNewBlock(newBlock, getLatestBlock())) {
         blockchain.push(newBlock);
     }
 };
 
+// Block validation utility
 const isValidNewBlock = (newBlock, previousBlock) => {
     if (previousBlock.index + 1 !== newBlock.index) {
         console.log('Invalid index'.red);
@@ -175,6 +190,7 @@ const isValidNewBlock = (newBlock, previousBlock) => {
     return true;
 };
 
+// Peer connection utility
 const connectToPeers = newPeers => {
     newPeers.forEach(peer => {
         const ws = new WebSocket(peer);
@@ -185,6 +201,7 @@ const connectToPeers = newPeers => {
     });
 };
 
+// Blockchain response handler
 const handleBlockchainResponse = message => {
     const receivedBlocks = JSON.parse(message.data).sort(
         (b1, b2) => b1.index - b2.index
@@ -219,6 +236,7 @@ const handleBlockchainResponse = message => {
     }
 };
 
+// Longest chain seletor
 const replaceChain = newBlocks => {
     if (isValidChain(newBlocks) && newBlocks.length > blockchain.length) {
         console.log(
@@ -232,6 +250,8 @@ const replaceChain = newBlocks => {
     }
 };
 
+
+// Chain validation utility
 const isValidChain = blockchainToValidate => {
     if (
         JSON.stringify(blockchainToValidate[0]) !==
@@ -250,6 +270,7 @@ const isValidChain = blockchainToValidate => {
     return true;
 };
 
+// Service startup
 const getLatestBlock = () => blockchain[blockchain.length - 1];
 const queryChainLengthMsg = () => ({ type: MessageType.QUERY_LATEST });
 const queryAllMsg = () => ({ type: MessageType.QUERY_ALL });
