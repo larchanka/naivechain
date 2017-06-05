@@ -2,7 +2,7 @@
   "name": "NaiveChain",
   "version": "2.0.0",
   "description": "Simple JS blockchanin implimentation",
-  "author": "Mikhail Larchanka (based on the code of Lauri Hartikka)",
+  "author": "Mikhail Larchanka",
   "repository": {
     "type": "git",
     "url": "https://github.com/larchanka/naivechain.git"
