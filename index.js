@@ -1,3 +1,1 @@
-const Service = require('./src/service');
-
-Service();
+const Service = require('./src/service')();
