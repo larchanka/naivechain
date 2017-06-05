@@ -1,3 +1,9 @@
+/*
+ * Originally written by Lauri Hartikka
+ * Modified by Mikhail Larchanka
+ * Twitter: https://twitter.com/MLarchanka
+ */
+
 const CryptoJS = require('crypto-js');
 const Express = require('express');
 const BodyParser = require('body-parser');
