@@ -1,8 +1,8 @@
-FROM node:4.6
+FROM node:6.10.0
 
 RUN mkdir /naivechain
 ADD package.json /naivechain/
-ADD main.js /naivechain/
+ADD index.js /naivechain/
 
 RUN cd /naivechain && npm install
 
