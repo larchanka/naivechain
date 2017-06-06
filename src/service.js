@@ -4,11 +4,15 @@
  * Twitter: https://twitter.com/MLarchanka
  */
 
-const CryptoJS = require('crypto-js');
-const Express = require('express');
-const BodyParser = require('body-parser');
 const WebSocket = require('ws');
 const Colors = require('colors');
+
+const MessageType = require('./messageType');
+const BlockChainGenerator = require('./blockChain');
+const Block = require('./block');
+const getGenesisBlock = require('./getGenesisBlock');
+const calculateHash = require('./calculateHash');
+const initHttpServer = require('./initHttpServer');
 
 // Connection parameters
 const HTTP_PORT = process.env.HTTP_PORT || 3001;
@@ -21,69 +25,20 @@ const CRYPTO_HASH =
     process.env.CRYPTO_HASH ||
     '816534932c2b7154836da6afc367695e6337db8a921823784c14378abed4f7d7';
 
-// Array of available sockets
+// List of available sockets
 const sockets = [];
 
-// Messages definition
-const MessageType = {
-    QUERY_LATEST: 0,
-    QUERY_ALL: 1,
-    RESPONSE_BLOCKCHAIN: 2,
-};
+// Genesis Block generation function
+const generateGenesisBlock = () => getGenesisBlock(Block, CRYPTO_DATA, CRYPTO_HASH);
 
-// Class definition
-class Block {
-    constructor(index, previousHash, timestamp, data, hash) {
-        this.index = index;
-        this.previousHash = previousHash.toString();
-        this.timestamp = timestamp;
-        this.data = data;
-        this.hash = hash.toString();
-    }
-}
-
-// Genesis block generator
-const getGenesisBlock = () => {
-    return new Block(0, '0', 1465154705, CRYPTO_DATA, CRYPTO_HASH);
-};
-
-// Inmemory blockchain storage
-const blockchain = [getGenesisBlock()];
-
-// HTTP server
-const initHttpServer = () => {
-    const app = Express();
-    app.use(BodyParser.json());
-
-    app.get('/blocks', (req, res) => res.send(JSON.stringify(blockchain)));
-    app.post('/mineBlock', (req, res) => {
-        const newBlock = generateNextBlock(req.body.data);
-        addBlock(newBlock);
-        broadcast(responseLatestMsg());
-        console.log('Block added:'.green, JSON.stringify(newBlock));
-        res.send();
-    });
-    app.get('/peers', (req, res) => {
-        res.send(
-            sockets.map(
-                s => `${s._socket.remoteAddress}:${s._socket.remotePort}`
-            )
-        );
-    });
-    app.post('/addPeer', (req, res) => {
-        connectToPeers([req.body.peer]);
-        res.send();
-    });
-    app.listen(HTTP_PORT, () =>
-        console.log('Listening http on port:'.yellow, HTTP_PORT)
-    );
-};
+// Genesis block adding
+let BlockChain = BlockChainGenerator(generateGenesisBlock());
 
 // Web-socket server
 const initP2PServer = () => {
     const server = new WebSocket.Server({ port: P2P_PORT });
     server.on('connection', ws => initConnection(ws));
-    console.log('Listening websocket p2p port on:'.yellow, P2P_PORT);
+    console.log('Listening websocket p2p on port:'.yellow, P2P_PORT);
 };
 
 // Web-socket connector
@@ -153,17 +108,10 @@ const calculateHashForBlock = block => {
     );
 };
 
-// Hash calculation utility
-const calculateHash = (index, previousHash, timestamp, data) => {
-    return CryptoJS.SHA256(
-        `${index}${previousHash}${timestamp}${data}`
-    ).toString();
-};
-
 // Block adding utility
 const addBlock = newBlock => {
     if (isValidNewBlock(newBlock, getLatestBlock())) {
-        blockchain.push(newBlock);
+        BlockChain.push(newBlock);
     }
 };
 
@@ -217,7 +165,7 @@ const handleBlockchainResponse = message => {
         );
         if (latestBlockHeld.hash === latestBlockReceived.previousHash) {
             console.log('We can append the received block to our chain'.yellow);
-            blockchain.push(latestBlockReceived);
+            BlockChain.push(latestBlockReceived);
             broadcast(responseLatestMsg());
         } else if (receivedBlocks.length === 1) {
             console.log('We have to query the chain from our peer'.yellow);
@@ -238,12 +186,12 @@ const handleBlockchainResponse = message => {
 
 // Longest chain seletor
 const replaceChain = newBlocks => {
-    if (isValidChain(newBlocks) && newBlocks.length > blockchain.length) {
+    if (isValidChain(newBlocks) && newBlocks.length > BlockChain.length) {
         console.log(
             `Received blockchain is valid.
             Replacing current blockchain with received blockchain`.yellow
         );
-        blockchain = newBlocks;
+        BlockChain = newBlocks;
         broadcast(responseLatestMsg());
     } else {
         console.log('Received blockchain invalid'.yellow);
@@ -255,12 +203,12 @@ const replaceChain = newBlocks => {
 const isValidChain = blockchainToValidate => {
     if (
         JSON.stringify(blockchainToValidate[0]) !==
-        JSON.stringify(getGenesisBlock())
+        JSON.stringify(generateGenesisBlock())
     ) {
         return false;
     }
     const tempBlocks = [blockchainToValidate[0]];
-    for (const i = 1; i < blockchainToValidate.length; i++) {
+    for (let i = 1; i < blockchainToValidate.length; i++) {
         if (isValidNewBlock(blockchainToValidate[i], tempBlocks[i - 1])) {
             tempBlocks.push(blockchainToValidate[i]);
         } else {
@@ -271,12 +219,12 @@ const isValidChain = blockchainToValidate => {
 };
 
 // Service startup
-const getLatestBlock = () => blockchain[blockchain.length - 1];
+const getLatestBlock = () => BlockChain[BlockChain.length - 1];
 const queryChainLengthMsg = () => ({ type: MessageType.QUERY_LATEST });
 const queryAllMsg = () => ({ type: MessageType.QUERY_ALL });
 const responseChainMsg = () => ({
     type: MessageType.RESPONSE_BLOCKCHAIN,
-    data: JSON.stringify(blockchain),
+    data: JSON.stringify(BlockChain),
 });
 const responseLatestMsg = () => ({
     type: MessageType.RESPONSE_BLOCKCHAIN,
@@ -286,10 +234,17 @@ const responseLatestMsg = () => ({
 const write = (ws, message) => ws.send(JSON.stringify(message));
 const broadcast = message => sockets.forEach(socket => write(socket, message));
 
-const init = () => {
+module.exports = () => {
     connectToPeers(INITIAL_PEERS);
-    initHttpServer();
+    initHttpServer({
+        BlockChain,
+        generateNextBlock,
+        addBlock,
+        broadcast,
+        responseLatestMsg,
+        sockets,
+        connectToPeers,
+        httpPort: HTTP_PORT
+    });
     initP2PServer();
 };
-
-module.exports = init;
