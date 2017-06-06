@@ -4,7 +4,6 @@
  * Twitter: https://twitter.com/MLarchanka
  */
 
-const WebSocket = require('ws');
 const Colors = require('colors');
 
 const MessageType = require('./messageType');
@@ -13,40 +12,28 @@ const Block = require('./block');
 const getGenesisBlock = require('./getGenesisBlock');
 const calculateHash = require('./calculateHash');
 const initHttpServer = require('./initHttpServer');
+const initP2PServer = require('./initP2PServer');
+const initConnectionHandler = require('./initConnection');
 
-// Connection parameters
 const HTTP_PORT = process.env.HTTP_PORT || 3001;
 const P2P_PORT = process.env.P2P_PORT || 6001;
 const INITIAL_PEERS = process.env.PEERS ? process.env.PEERS.split(',') : [];
-
-// Chain parameters
 const CRYPTO_DATA = process.env.CRYPTO_DATA || 'this-is-block-data-!!!';
 const CRYPTO_HASH =
     process.env.CRYPTO_HASH ||
     '816534932c2b7154836da6afc367695e6337db8a921823784c14378abed4f7d7';
-
-// List of available sockets
 const sockets = [];
-
-// Genesis Block generation function
 const generateGenesisBlock = () => getGenesisBlock(Block, CRYPTO_DATA, CRYPTO_HASH);
-
-// Genesis block adding
-let BlockChain = BlockChainGenerator(generateGenesisBlock());
-
-// Web-socket server
-const initP2PServer = () => {
-    const server = new WebSocket.Server({ port: P2P_PORT });
-    server.on('connection', ws => initConnection(ws));
-    console.log('Listening websocket p2p on port:'.yellow, P2P_PORT);
-};
-
-// Web-socket connector
-const initConnection = ws => {
-    sockets.push(ws);
-    initMessageHandler(ws);
-    initErrorHandler(ws);
-    write(ws, queryChainLengthMsg());
+let BlockChain = BlockChainGenerator(generateGenesisBlock()); // can be rewriten
+const initConnection = (ws) => {
+    return initConnectionHandler({
+        ws,
+        sockets,
+        initMessageHandler,
+        initErrorHandler,
+        queryChainLengthMsg,
+        write
+    });
 };
 
 // Web-socket message handler
@@ -246,5 +233,8 @@ module.exports = () => {
         connectToPeers,
         httpPort: HTTP_PORT
     });
-    initP2PServer();
+    initP2PServer({
+        p2pPort: P2P_PORT,
+        initConnection
+    });
 };
